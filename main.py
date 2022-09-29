@@ -45,19 +45,21 @@ def crawl(url, seconds):
         return
 
     else:
-        addUrlToVisitedLinks(url)
         processUrl(url, seconds)
-        not_visited_urls.pop(0)  # Eliminar URL ya visitada
 
 
 """
-Procesa una url pasada como parametro. 
+Para una URL determinada, descarga el contenido HTML y explora todos los enlaces que contiene.
+Los enlaces extraidos los añade a la lista de URLs visitadas.
 """
 
 
 def processUrl(url, seconds):
     global max_downloads
     global visited_urls
+
+    addLinkToExisingList(url, visited_urls)
+    not_visited_urls.pop(0)
 
     # visited_urls.append(url)
     print(str(max_downloads) + " :::: " + str(datetime.now().strftime("%H:%M:%S")) + " :::: Explorando " + str(
@@ -72,19 +74,19 @@ def processUrl(url, seconds):
         # Contenido de la pagina
         html_content = r.content
         soup = BeautifulSoup(html_content, 'html.parser')
+
+        # Obtener todos los enlaces que contiene la página
         links = soup.find_all('a')
 
-        # Recorrer todos los links
+        # Añadir los nuevos enlaces a los enlaces no visitados
         for link in links:
-            # Obtengo solamente la direccion asociada
-            newLink = normalize_link(url, link)
-            if not link in visited_urls:
-                visited_urls.append(link)
+            normalized_link = normalize_link(url, link)
+            addLinkToExisingList(normalized_link, not_visited_urls)
 
-            if newLink and len(newLink) > 0:
-                max_downloads -= 1
-                time.sleep(seconds)
-                crawl(newLink, seconds)
+            #TODO: Explorar el link si no ha sido explorado aun
+            if normalized_link and len(normalized_link) > 0 \
+                    and not normalized_link in visited_urls:
+                crawl(normalized_link, seconds)
 
     except requests.exceptions.Timeout:
         logging.error("La URL no puede ser explorada");
@@ -138,14 +140,13 @@ def normalize_link(url, linkToNormalize):
 
 
 """
-Añade una URL pasada como parámetro a la lista de URLs visitadas.
+Añade una URL pasada como parámetro a la lista indicada.
 """
 
 
-def addUrlToVisitedLinks(urlToAdd):
-    if not urlToAdd in visited_urls \
-            and not urlToAdd in not_visited_urls:
-        not_visited_urls.append(urlToAdd)
+def addLinkToExisingList(urlToAdd, list):
+    if urlToAdd and not urlToAdd in list:
+        list.append(urlToAdd)
 
 
 """
@@ -211,10 +212,10 @@ def main():
         crawl(not_visited_urls[0], DEFAULT_SECONDS)
     # generateSeedFile()
 
-    print("\n\nURLS NO VISITADAS\n\n")
+    print("URLS NO VISITADAS: " + str(len(not_visited_urls)))
     print(not_visited_urls)
 
-    print("\n\nURLS VISITADAS\n\n")
+    print("\n\nURLS VISITADAS")
     print(visited_urls)
 
 
