@@ -1,13 +1,10 @@
-"""
-author: Francisco Coya Abajo
-description: Práctica 2 SIW: Crawler básico.
-version: v1.0.1
-"""
+# author: Francisco Coya Abajo
+# description: Práctica 2 SIW: Crawler básico.
+# version: v1.0.3
+
 from datetime import datetime
 import logging
-import sys
 import requests
-import time
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse
 import re
@@ -15,54 +12,61 @@ import os
 
 # import urllib.robotparser
 
+
 max_downloads = 5  # Número máximo de archivos a descargar
-DEFAULT_SECONDS = 5;
+DEFAULT_SECONDS = 5
 target_type = 'text/html'  # Solo va a buscar páginas HTML
 visited_urls = []  # Lista de URLs visitadas
 not_visited_urls = []  # Lista de URLs por visitar
-url_seed = []  # Lista de semillas de URL para realizar la búsqueda
-seed_index = 1  # Indice para distinguir entre los ficheros semilla generados
-last_visited_seed = 0;  # Posición de la última URL de la lista visitada
-
-"""
-Función principal del programa.
-A partir de una URL dada el tiempo de espera entre petición, realiza un escaneo y descarga de tantos archivos
-como especifique max_downloads
-"""
 
 
 def crawl(url, seconds):
+    """
+    Crawl de una URL.
+
+    Invoca a #processUrl(). Si el número de descargas llega a su límite, se finaliza la búsqueda.
+
+    :param url: URL a explorar.
+    :param seconds: Tiempo en segundos a esperar.
+    :return: void
+    """
     global max_downloads
-    global last_visited_seed
     global not_visited_urls
 
-    # Si se ha utilizado la última URL de las semillas, inicializar en la primera
-    if last_visited_seed == len(url_seed):
-        last_visited_seed = 0
-
+    # Condicion de parada: Límite de descargas establecido
     if max_downloads == 0:
-        sys.exit()
         return
 
     else:
         processUrl(url, seconds)
 
 
-"""
-Para una URL determinada, descarga el contenido HTML y explora todos los enlaces que contiene.
-Los enlaces extraidos los añade a la lista de URLs visitadas.
-"""
-
-
 def processUrl(url, seconds):
+    """
+    Procesamiento de una URL.
+
+    Para realizar el procesamiento de la url :url se realiza:
+
+        1. Decremento del número de decargas realizadas.
+        2. Inserción de :url dentro de la lista :visited_urls de URLs visitadas.
+        3. Descarga del contenido HTML de la página con URL :url.
+        4. Obtención de todos los enlaces(Absolutos y relativos) de dicha URL. Utilización de la libraría BeautifulSoap.
+        5. Para cada enlace obtenido:
+            5.1. Normalización del enlace normalize_link()
+            5.2. Añadirlo a la lista :not_visited_urls , de enlaces no visitados aún.
+
+    :param url: URL a procesar.
+    :param seconds: Tiempo de espera entre descargas, expresado en segundos.
+
+    :return: void
+    """
     global max_downloads
     global visited_urls
 
+    max_downloads -= 1
     addLinkToExisingList(url, visited_urls)
-    not_visited_urls.pop(0)
 
-    # visited_urls.append(url)
-    print(str(max_downloads) + " :::: " + str(datetime.now().strftime("%H:%M:%S")) + " :::: Explorando " + str(
+    print(str(max_downloads + 1) + " :::: " + str(datetime.now().strftime("%H:%M:%S")) + " :::: Explorando " + str(
         url) + "\n");
     # print("\nDescargas: " + str(max_downloads))
     try:
@@ -83,40 +87,47 @@ def processUrl(url, seconds):
             normalized_link = normalize_link(url, link)
             addLinkToExisingList(normalized_link, not_visited_urls)
 
-            #TODO: Explorar el link si no ha sido explorado aun
-            if normalized_link and len(normalized_link) > 0 \
-                    and not normalized_link in visited_urls:
-                crawl(normalized_link, seconds)
-
     except requests.exceptions.Timeout:
-        logging.error("La URL no puede ser explorada");
+        logging.error("La URL no puede ser explorada")
+        return
 
 
-"""
-Elimina las slashes de una cadena dada.
-"""
+def replace_slash_from_word(word):
+    """
+    Elimina los slashes("/")
 
-
-def replaceBackSlashesFromWord(word):
+    :param word: Palabra a formatear.
+    :return: Nueva palabra sin slashes ("/")
+    """
     return str(word).replace("/", "")
 
 
-"""
-Comprueba que la URL pasada como parametro es válida
-"""
-
-
 def isURLWellFormed(urlToCheck):
+    """
+    Validación de una URL.
+
+    :param urlToCheck: URL a comprobar.
+    :return: True si está bien formada y False en caso contrario.
+    """
     return len(urlToCheck.path) > 0 and len(urlToCheck.netloc) > 0
 
 
-"""
-Normaliza un link pasado como parámetro. Para ello, diferencia los links relativos de los absolutos
-"""
+def normalize_link(url, url_to_normalize):
+    """
+    Normalización de una URL.
 
+    Se distinguen dos escenaarios:
+        - URL absoluta: Se devuelve igual a como se pasa por parámetro.
+        -  URL relativa: Se realiza un procesamiento previo:
+            1. Validación de la URL.
+            2. Reemplazo de las slashes.
+            3. Concatenacion de la :url con la url relativa.
 
-def normalize_link(url, linkToNormalize):
-    link_href = str(linkToNormalize.get('href'))
+    :param url: URL semilla.
+    :param url_to_normalize: URL a normalizar.
+    :return: void
+    """
+    link_href = str(url_to_normalize.get('href'))
 
     if len(link_href) < 2 or link_href == "" or len(urlparse(url).scheme) == 0:
         return
@@ -128,36 +139,39 @@ def normalize_link(url, linkToNormalize):
 
         if isURLWellFormed(parsedUrl):
             # Construcción de la url a partir del path relativo y la url original
-            return replaceBackSlashesFromWord(originalUrlScheme) + "://" \
-                   + replaceBackSlashesFromWord(parsedUrl.netloc)
+            return replace_slash_from_word(originalUrlScheme) + "://" \
+                   + replace_slash_from_word(parsedUrl.netloc)
 
     else:
         parsedCorrectUrl = urlparse(link_href)
         if len(parsedCorrectUrl.scheme) > 0 and parsedCorrectUrl.scheme == "http" \
                 or parsedCorrectUrl.scheme == "https":
-            return replaceBackSlashesFromWord(parsedCorrectUrl.scheme) + "://" \
-                   + replaceBackSlashesFromWord(parsedCorrectUrl.netloc) + "/"
-
-
-"""
-Añade una URL pasada como parámetro a la lista indicada.
-"""
+            return replace_slash_from_word(parsedCorrectUrl.scheme) + "://" \
+                   + replace_slash_from_word(parsedCorrectUrl.netloc) + "/"
 
 
 def addLinkToExisingList(urlToAdd, list):
+    """
+    Añadir una URL a una lista.
+
+    :param urlToAdd: URL a añadir a la lista :list
+    :param list: Lista de elementos donde se añadirá :urlToAdd
+
+    :return: void
+    """
     if urlToAdd and not urlToAdd in list:
         list.append(urlToAdd)
 
 
-"""
-Lee un fichero de texto con el nombre especificado como parámetro y carga en una 
-lista las URL semilla leídas.
-"""
-
-
 def readTextFile(filename):
-    # if not isValidFilename(filename):
-    #   return
+    """
+    Lectura de fichero.
+
+    Lee el fichero con el nombre pasado como parámetro y vuelca las URLs semilla a
+    la lista.
+
+    :param filename: Nombre del fichero a leer.
+    """
     global not_visited_urls
 
     file_abs_path = os.path.abspath(filename)
@@ -166,61 +180,42 @@ def readTextFile(filename):
         f.close()
 
 
-"""
-Comprueba que un nombre de fichero pasado como parámetro es válido.
-"""
-
-
 def isValidFilename(filenameToCheck):
+    """
+    Comprueba que un nombre de fichero pasado como parámetro es válido.
+
+    :param filenameToCheck:
+    """
     return len(str(filenameToCheck)) > 0 and re.search(".txt$", filenameToCheck)
 
 
-"""
-Crea un fichero de URLs semilla con los elementos de la lista de URL.
-"""
+def main(seed_filename="seed.txt", max_downloads_limit=10, seconds=5):
+    """
+    Programa que ejecuta el Crawler.
 
-
-def generateSeedFile():
-    global seed_index
-
-    with open(os.path.abspath(generateFilename()), 'w') as f:
-        for url in url_seed:
-            f.write(url + "\n")
-        f.close()
-
-    seed_index = seed_index + 1
-
-
-"""
-Función auxiliar a @generateSeedFile que genera un nuevo nombre para el fichero de semillas a generar.
-"""
-
-
-def generateFilename():
-    return "seed".join(str(seed_index)).join(".txt")
-
-
-def main():
+    :param seed_filename: Nombre del fichero de semillas.
+    :param max_downloads_limit: Número máximo de archivos a descargar.
+    :param seconds: Tiempo de espera entre descargas (En segundos).
+    """
     global not_visited_urls
     global visited_urls
+    global max_downloads
 
-    # url_seed = [] # Para iteración, la lista ha de inicializarse
-    readTextFile(os.path.abspath("seed.txt"))
+    max_downloads = max_downloads_limit
+
+    readTextFile(os.path.abspath(seed_filename))
     if len(not_visited_urls) == 0:
         print("No se puede realizar la búsqueda")
     else:
-        crawl(not_visited_urls[0], DEFAULT_SECONDS)
-    # generateSeedFile()
+        for seed_url in not_visited_urls:
+            crawl(seed_url, seconds)
 
     print("URLS NO VISITADAS: " + str(len(not_visited_urls)))
     print(not_visited_urls)
 
-    print("\n\nURLS VISITADAS")
+    print("\n\nURLS VISITADAS: " + str(len(visited_urls)))
     print(visited_urls)
 
 
-# crawl("http://www.ingenieriainformatica.uniovi.es", 5)
-# print("URLS: \n")
-# print(visited_urls)
-
-main()
+# TODO: Prueba de ejecución. BORRAR
+main("seed.txt", 10, DEFAULT_SECONDS)
